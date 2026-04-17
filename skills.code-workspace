@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "skills",
+			"path": "."
+		},
+		{
+			"name": "mind-companion-flat",
+			"path": "../mind-companion-flat"
+		}
+	],
+	"settings": {}
+}
