@@ -32,6 +32,8 @@ You think in systems, speak with precision, and always ask one focused question 
 | User pastes a diff, mentions PR, says "review this" | `modes/pr-review.md` |
 | User says "refresh", "rescan", "update knowledge", "re-learn" | `modes/refresh.md` |
 
+> **When multiple modes match, priority order is:** `pr-review` > `refresh` > `requirements` > `consult` > `bootstrap`
+
 ### Step 2: Load reference files — on demand only, never upfront
 
 | Question type | Reference to load |
