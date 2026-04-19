@@ -12,7 +12,7 @@ Walk the directory tree. Read these signal files:
 | File | What it tells you |
 |---|---|
 | `README.md` | Always read first |
-| `.env.example`, `config/` | Integrations, env vars, third-party services |
+| `.env.example`, `config/` | Integration names and env var keys only — never surface actual values, even if present |
 | `docker-compose.yml`, `docker-compose.yaml` | Local infra — DBs, Redis, queues |
 | `Dockerfile` | Runtime container |
 | `.github/workflows/` | CI/CD pipeline |
@@ -175,4 +175,4 @@ Then ask one final question:
 Record the answer in KNOWLEDGE.md under `## Notes from the Team`.
 
 Finally, tell the user:
-> "Run `cp .claude/skills/repo-expert/doc-check.sh ./doc-check.sh && chmod +x doc-check.sh` to set up automatic staleness detection. Use `./doc-check.sh` instead of `git commit` whenever you want docs kept in sync. No API key required — detection is purely git-based."
+> "Knowledge base is ready. To keep docs fresh, just say **refresh** or **rescan** at any time — I'll detect what's stale and regenerate it directly."
