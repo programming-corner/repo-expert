@@ -25,7 +25,7 @@ code review, PR review, diagrams, system design. What are you working on?
 > "How does the order lifecycle work?" / "Walk me through checkout"
 
 - Load `docs/expert/<flow>.md` if it exists
-- If not (lazy), read the relevant source files now and generate it
+- If not (lazy), read the relevant source files now, generate it, and write it to `docs/expert/<flow>.md` (create the directory if absent)
 - Always include a Mermaid sequence diagram for flows with 3+ actors
 - Load `references/doc-templates.md` for the flow doc template
 

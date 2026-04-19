@@ -2,9 +2,10 @@
 # doc-check.sh — regenerate stale repo-expert docs before committing
 #
 # Modes:
-#   --prepare            non-interactive: detect stale docs + regenerate (Claude runs this)
-#   --commit [msg]       interactive: approve diffs, commit, push (opened in terminal)
-#   [msg]                run both phases in one terminal session (default)
+#   --prepare              non-interactive: detect stale docs + regenerate (Claude runs this)
+#   --commit [msg]         interactive: approve diffs, commit, push (opened in terminal)
+#   --commit --auto        non-interactive: apply all, static commit msg, auto-push (CI-safe)
+#   [msg]                  run both phases in one terminal session (default)
 #
 # Requires: claude CLI (Claude Code), git
 
@@ -18,11 +19,17 @@ SKILL_DIR="${SKILL_DIR:-.claude/skills/repo-expert}"
 # ── arg parsing ───────────────────────────────────────────────────────────────
 MODE="full"
 COMMIT_MSG=""
-case "${1:-}" in
-  --prepare) MODE="prepare" ;;
-  --commit)  MODE="commit"; COMMIT_MSG="${2:-}" ;;
-  *)         MODE="full";   COMMIT_MSG="${1:-}" ;;
-esac
+AUTO=0
+_args=("$@")
+for _i in "${!_args[@]}"; do
+  case "${_args[$_i]}" in
+    --prepare) MODE="prepare" ;;
+    --commit)  MODE="commit" ;;
+    --auto)    AUTO=1 ;;
+    *)         COMMIT_MSG="${_args[$_i]}" ;;
+  esac
+done
+unset _args _i
 
 # ── manifest path (per-repo, in /tmp) ────────────────────────────────────────
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
@@ -236,31 +243,39 @@ cmd_commit() {
       [[ -z "$original" || -z "$tmp" ]] && continue
       [[ ! -f "$tmp" ]] && { warn "Temp file missing for $original — skipping"; continue; }
 
-      echo ""
-      hr
-      warn "Review: $original"
-      hr
-      show_diff "$original" "$tmp"
-      hr
-      echo ""
+      if (( AUTO )); then
+        cp "$tmp" "$original"
+        git add "$original"
+        ok "Auto-staged: $original"
+        (( docs_refreshed++ )) || true
+      else
+        echo ""
+        hr
+        warn "Review: $original"
+        hr
+        show_diff "$original" "$tmp"
+        hr
+        echo ""
 
-      while true; do
-        read -rp "  Approve? [y]es / [n]o / [e]dit  → " choice </dev/tty
-        case "$choice" in
-          y|Y|yes)
-            cp "$tmp" "$original"
-            git add "$original"
-            ok "Staged: $original"
-            (( docs_refreshed++ )) || true
-            break ;;
-          n|N|no)
-            warn "Skipped: $original"
-            break ;;
-          e|E|edit)
-            "${EDITOR:-vi}" "$tmp" </dev/tty ;;
-          *) warn "Enter y, n, or e" ;;
-        esac
-      done
+        while true; do
+          read -rp "  Approve? [y]es / [n]o / [e]dit  → " choice </dev/tty
+          case "$choice" in
+            y|Y|yes)
+              cp "$tmp" "$original"
+              git add "$original"
+              ok "Staged: $original"
+              (( docs_refreshed++ )) || true
+              break ;;
+            n|N|no)
+              warn "Skipped: $original"
+              break ;;
+            e|E|edit)
+              "${EDITOR:-vi}" "$tmp" </dev/tty ;;
+            *) warn "Enter y, n, or e" ;;
+          esac
+        done
+      fi
+
       rm -f "$tmp"
     done < "$MANIFEST"
   fi
@@ -268,25 +283,34 @@ cmd_commit() {
   rm -f "$MANIFEST"
 
   echo ""
-  if [[ -z "$COMMIT_MSG" ]]; then
+  if (( AUTO )); then
+    local head_sha
+    head_sha=$(git rev-parse --short HEAD)
+    COMMIT_MSG="docs: refresh stale docs [${head_sha}]"
+  elif [[ -z "$COMMIT_MSG" ]]; then
     read -rp "Commit message: " COMMIT_MSG </dev/tty
   fi
   [[ -z "$COMMIT_MSG" ]] && { err "Commit message cannot be empty"; exit 1; }
-
-  (( docs_refreshed > 0 )) && COMMIT_MSG="${COMMIT_MSG} [docs refreshed]"
 
   info "Committing: $COMMIT_MSG"
   git commit -m "$COMMIT_MSG"
   echo ""
 
-  read -rp "Push now? [Y/n] " push_choice </dev/tty
-  if [[ "${push_choice:-Y}" =~ ^[Yy]$ ]]; then
+  if (( AUTO )); then
     info "Pushing..."
     git push
     echo ""
     ok "Done — committed and pushed"
   else
-    ok "Committed locally. Run 'git push' when ready."
+    read -rp "Push now? [Y/n] " push_choice </dev/tty
+    if [[ "${push_choice:-Y}" =~ ^[Yy]$ ]]; then
+      info "Pushing..."
+      git push
+      echo ""
+      ok "Done — committed and pushed"
+    else
+      ok "Committed locally. Run 'git push' when ready."
+    fi
   fi
 }
 

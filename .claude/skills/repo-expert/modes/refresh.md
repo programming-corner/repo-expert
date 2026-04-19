@@ -25,6 +25,7 @@ This means:
 Each generated doc has frontmatter:
 ```yaml
 ---
+schema_version: "1.0"
 generated: YYYY-MM-DD
 git_sha: <sha>
 source_files:
@@ -80,17 +81,71 @@ git add src/orders/orders.service.ts   # stage your code changes
 
 ---
 
+## Two-phase workflow (Claude + terminal)
+
+`doc-check.sh` has two modes so Claude handles the non-interactive work and the developer
+only sees the interactive approval + commit prompts.
+
+### Phase 1 — Claude runs (non-interactive)
+
+Claude runs this via the Bash tool:
+```bash
+cd <repo-root> && ./doc-check.sh --prepare
+```
+
+What it does:
+- Detects stale docs via git diff (zero API cost)
+- Calls `claude --print` to regenerate each stale doc into a temp file
+- Saves a manifest at `/tmp/doc-check-<repo-name>.manifest` mapping `original → temp`
+
+### Phase 2 — Developer runs (interactive)
+
+Claude opens a terminal pre-navigated to the repo root for the commit phase:
+```bash
+osascript -e "tell app \"Terminal\" to do script \"cd $(git rev-parse --show-toplevel) && ./doc-check.sh --commit\""
+```
+
+What the developer sees in the terminal:
+- Coloured diff for each regenerated doc (metadata summary + content-only diff)
+- `Approve? [y]es / [n]o / [e]dit` prompt per doc
+- Commit message prompt
+- Push prompt
+
+**Fallback — if not on macOS:** Tell the user:
+> Prepare is done. Now run in your terminal:
+> ```bash
+> ./doc-check.sh --commit
+> ```
+
+### Phase 2 — Auto mode (non-interactive, CI-safe)
+
+Skips all prompts, applies every regenerated doc, commits with a static message, and pushes.
+No TTY required — safe to run in GitHub Actions or any headless environment.
+
+```bash
+./doc-check.sh --commit --auto
+```
+
+Commit message format: `docs: refresh stale docs [<short-sha>]`
+
+Use this in CI after `--prepare` when you want fully automated doc sync without human review.
+
+---
+
 ## How Claude regenerates a doc (when invoked by doc-check.sh)
 
 When `claude --print` is called for a stale doc, follow these steps:
 
 1. Read the current doc — preserve its section structure and frontmatter keys
-2. Read every file listed in `source_files` that appears in the git diff
-3. Regenerate the doc using the same template from `references/doc-templates.md`
-4. Update frontmatter:
+2. **Check `schema_version`** in the doc's frontmatter against the template in `references/doc-templates.md`.
+   If absent or mismatched: abort this doc, print `⚠️ schema_version mismatch in <file> — manual migration required`, and skip to the next doc.
+3. Read every file listed in `source_files` that appears in the git diff
+4. Regenerate the doc using the same template from `references/doc-templates.md`
+5. Update frontmatter:
    - `git_sha` → current `HEAD` SHA (`git rev-parse HEAD`)
    - `generated` → today's date
-5. Output **only** the complete updated doc — no explanation, no markdown fences wrapping it
+   - `schema_version` → unchanged (only bump when the template version changes)
+6. Output **only** the complete updated doc — no explanation, no markdown fences wrapping it
 
 **Key constraint:** Never invent information. If a source file no longer contains
 something the doc referenced, remove that section rather than leaving stale content.

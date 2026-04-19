@@ -10,6 +10,7 @@ Write `Unknown — ask team` rather than leaving any field blank.
 ```markdown
 ---
 repomind_version: 3.0
+schema_version: "1.0"
 generated: {{DATE}}
 git_sha: {{GIT_SHA}}
 ---
