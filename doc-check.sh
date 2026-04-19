@@ -1,17 +1,35 @@
 #!/usr/bin/env bash
 # doc-check.sh — regenerate stale repo-expert docs before committing
-# Usage: ./doc-check.sh ["commit message"]
+#
+# Modes:
+#   --prepare            non-interactive: detect stale docs + regenerate (Claude runs this)
+#   --commit [msg]       interactive: approve diffs, commit, push (opened in terminal)
+#   [msg]                run both phases in one terminal session (default)
+#
 # Requires: claude CLI (Claude Code), git
 
 set -euo pipefail
 
-# ── config ──────────────────────────────────────────────────────────────────
+# ── config ────────────────────────────────────────────────────────────────────
 DOCS_DIR="${DOCS_DIR:-docs/expert}"
 KNOWLEDGE_FILE="${KNOWLEDGE_FILE:-KNOWLEDGE.md}"
 SKILL_DIR="${SKILL_DIR:-.claude/skills/repo-expert}"
-COMMIT_MSG="${1:-}"
 
-# ── colours ──────────────────────────────────────────────────────────────────
+# ── arg parsing ───────────────────────────────────────────────────────────────
+MODE="full"
+COMMIT_MSG=""
+case "${1:-}" in
+  --prepare) MODE="prepare" ;;
+  --commit)  MODE="commit"; COMMIT_MSG="${2:-}" ;;
+  *)         MODE="full";   COMMIT_MSG="${1:-}" ;;
+esac
+
+# ── manifest path (per-repo, in /tmp) ────────────────────────────────────────
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+REPO_SLUG=$(basename "$REPO_ROOT")
+MANIFEST="/tmp/doc-check-${REPO_SLUG}.manifest"
+
+# ── colours ───────────────────────────────────────────────────────────────────
 R='\033[0;31m'; G='\033[0;32m'; Y='\033[1;33m'; B='\033[0;34m'; NC='\033[0m'
 info()  { echo -e "${B}→${NC} $*"; }
 ok()    { echo -e "${G}✓${NC} $*"; }
@@ -19,15 +37,16 @@ warn()  { echo -e "${Y}⚠${NC} $*"; }
 err()   { echo -e "${R}✗${NC} $*" >&2; }
 hr()    { echo "────────────────────────────────────────────────"; }
 
-# ── prereqs ──────────────────────────────────────────────────────────────────
+# ── prereqs ───────────────────────────────────────────────────────────────────
 check_prereqs() {
-  if ! command -v claude >/dev/null 2>&1; then
-    err "claude CLI not found — install Claude Code: https://claude.ai/code"
-    exit 1
-  fi
   if ! git rev-parse --git-dir >/dev/null 2>&1; then
-    err "Not inside a git repository"
-    exit 1
+    err "Not inside a git repository"; exit 1
+  fi
+}
+
+check_claude() {
+  if ! command -v claude >/dev/null 2>&1; then
+    err "claude CLI not found — install Claude Code: https://claude.ai/code"; exit 1
   fi
 }
 
@@ -35,13 +54,11 @@ check_staged() {
   if git diff --cached --quiet; then
     warn "No staged changes found."
     echo "  Stage your files first:  git add <files>"
-    echo "  Then re-run:             ./doc-check.sh"
     exit 1
   fi
 }
 
 # ── frontmatter helpers ───────────────────────────────────────────────────────
-# Extract a scalar frontmatter field value (e.g. git_sha: abc123)
 frontmatter_scalar() {
   local file="$1" field="$2"
   awk -v f="$field" '
@@ -50,7 +67,6 @@ frontmatter_scalar() {
   ' "$file"
 }
 
-# Extract the source_files list from frontmatter
 frontmatter_sources() {
   local file="$1"
   awk '
@@ -67,49 +83,37 @@ is_stale() {
   local doc="$1"
   local sha
   sha=$(frontmatter_scalar "$doc" "git_sha")
-  [[ -z "$sha" ]] && return 1                       # no sha → skip
+  [[ -z "$sha" ]] && return 1
 
   local changed
   changed=$(git diff "${sha}..HEAD" --name-only 2>/dev/null || true)
-  [[ -z "$changed" ]] && return 1                   # nothing changed
+  [[ -z "$changed" ]] && return 1
 
   local src
   while IFS= read -r src; do
     [[ -z "$src" ]] && continue
-    if echo "$changed" | grep -qF "$src"; then
-      return 0                                       # stale
-    fi
+    echo "$changed" | grep -qF "$src" && return 0
   done < <(frontmatter_sources "$doc")
 
   return 1
 }
 
 collect_stale() {
-  local -a stale=()
+  [[ -f "$KNOWLEDGE_FILE" ]] && is_stale "$KNOWLEDGE_FILE" && echo "$KNOWLEDGE_FILE"
 
-  # Check KNOWLEDGE.md
-  if [[ -f "$KNOWLEDGE_FILE" ]] && is_stale "$KNOWLEDGE_FILE"; then
-    stale+=("$KNOWLEDGE_FILE")
-  fi
-
-  # Check flow docs
   if [[ -d "$DOCS_DIR" ]]; then
     while IFS= read -r doc; do
-      is_stale "$doc" && stale+=("$doc")
+      is_stale "$doc" && echo "$doc"
     done < <(find "$DOCS_DIR" -name "*.md" -type f | sort)
   fi
-
-  printf '%s\n' "${stale[@]+"${stale[@]}"}"
 }
 
-# ── regeneration ─────────────────────────────────────────────────────────────
+# ── regeneration (non-interactive) ───────────────────────────────────────────
 build_prompt() {
   local doc="$1"
-  local sources
+  local sources current_sha today
   sources=$(frontmatter_sources "$doc")
-  local current_sha
-  current_sha=$(git rev-parse HEAD)
-  local today
+  current_sha=$(git rev-parse --short HEAD)
   today=$(date +%Y-%m-%d)
 
   cat <<PROMPT
@@ -137,10 +141,7 @@ regenerate_doc() {
   tmp=$(mktemp /tmp/doc-check-XXXXXX.md)
 
   info "Regenerating: $doc"
-  local prompt
-  prompt=$(build_prompt "$doc")
-
-  if claude --print "$prompt" > "$tmp" 2>/dev/null; then
+  if claude --print "$(build_prompt "$doc")" > "$tmp" 2>/dev/null; then
     echo "$tmp"
   else
     err "Claude failed to regenerate $doc — skipping"
@@ -149,46 +150,13 @@ regenerate_doc() {
   fi
 }
 
-# ── approval UI ──────────────────────────────────────────────────────────────
-approve_doc() {
-  local original="$1" regenerated="$2"
-
-  echo ""
-  hr
-  warn "Review changes for: $original"
-  hr
-  diff --color=always -u "$original" "$regenerated" || true
-  hr
-  echo ""
-
-  while true; do
-    read -rp "  Approve? [y]es / [n]o / [e]dit  → " choice </dev/tty
-    case "$choice" in
-      y|Y|yes) return 0 ;;
-      n|N|no)  return 1 ;;
-      e|E|edit)
-        "${EDITOR:-vi}" "$regenerated" </dev/tty
-        ;;
-      *) warn "Enter y, n, or e" ;;
-    esac
-  done
-}
-
-# ── commit + push ─────────────────────────────────────────────────────────────
-get_commit_msg() {
-  if [[ -n "$COMMIT_MSG" ]]; then
-    echo "$COMMIT_MSG"
-    return
-  fi
-  read -rp "Commit message: " msg </dev/tty
-  echo "$msg"
-}
-
-# ── main ──────────────────────────────────────────────────────────────────────
-main() {
+# ── PHASE 1: prepare (non-interactive, Claude runs this) ─────────────────────
+cmd_prepare() {
   check_prereqs
+  check_claude
   check_staged
 
+  rm -f "$MANIFEST"
   echo ""
   info "Scanning for stale docs..."
 
@@ -197,47 +165,118 @@ main() {
     [[ -n "$line" ]] && stale+=("$line")
   done < <(collect_stale)
 
-  local docs_refreshed=0
-
   if [[ ${#stale[@]} -eq 0 ]]; then
-    ok "All docs are up to date"
-  else
-    warn "${#stale[@]} stale doc(s) found: ${stale[*]}"
-    echo ""
-
-    for doc in "${stale[@]}"; do
-      local tmp
-      tmp=$(regenerate_doc "$doc")
-      [[ -z "$tmp" ]] && continue
-
-      if approve_doc "$doc" "$tmp"; then
-        cp "$tmp" "$doc"
-        git add "$doc"
-        ok "Staged updated doc: $doc"
-        (( docs_refreshed++ )) || true
-      else
-        warn "Skipped: $doc"
-      fi
-      rm -f "$tmp"
-    done
-
-    echo ""
-    if (( docs_refreshed > 0 )); then
-      ok "$docs_refreshed doc(s) included in commit"
-    else
-      info "No docs added — committing original staged changes only"
-    fi
+    ok "All docs are up to date — nothing to regenerate"
+    echo "NONE" > "$MANIFEST"
+    return
   fi
 
+  warn "${#stale[@]} stale doc(s) found"
+  local count=0
+
+  for doc in "${stale[@]}"; do
+    local tmp
+    tmp=$(regenerate_doc "$doc")
+    if [[ -n "$tmp" ]]; then
+      printf '%s\t%s\n' "$doc" "$tmp" >> "$MANIFEST"
+      (( count++ )) || true
+    fi
+  done
+
   echo ""
-  local msg
-  msg=$(get_commit_msg)
-  [[ -z "$msg" ]] && { err "Commit message cannot be empty"; exit 1; }
+  ok "$count doc(s) regenerated → manifest saved to $MANIFEST"
+  info "Now run:  ./doc-check.sh --commit"
+}
 
-  (( docs_refreshed > 0 )) && msg="${msg} [docs refreshed]"
+# ── diff helpers ─────────────────────────────────────────────────────────────
+# Strip YAML frontmatter block (between first two ---), output body only
+strip_frontmatter() {
+  awk '/^---$/{c++; if(c==2){found=1; next}} found{print}' "$1"
+}
 
-  info "Committing: $msg"
-  git commit -m "$msg"
+# Show compact frontmatter summary + content-only diff
+show_diff() {
+  local original="$1" regenerated="$2"
+
+  local old_sha new_sha old_date new_date
+  old_sha=$(frontmatter_scalar "$original"   "git_sha")
+  new_sha=$(frontmatter_scalar "$regenerated" "git_sha")
+  old_date=$(frontmatter_scalar "$original"   "generated")
+  new_date=$(frontmatter_scalar "$regenerated" "generated")
+
+  echo -e "  ${Y}metadata${NC}  generated: ${old_date} → ${new_date}   git_sha: ${old_sha} → ${new_sha}"
+  echo ""
+
+  local tmp_a tmp_b
+  tmp_a=$(mktemp); tmp_b=$(mktemp)
+  strip_frontmatter "$original"    > "$tmp_a"
+  strip_frontmatter "$regenerated" > "$tmp_b"
+  diff --color=always -u "$tmp_a" "$tmp_b" || true
+  rm -f "$tmp_a" "$tmp_b"
+}
+
+# ── PHASE 2: commit (interactive, runs in terminal) ──────────────────────────
+cmd_commit() {
+  check_prereqs
+  check_staged
+
+  local docs_refreshed=0
+
+  if [[ ! -f "$MANIFEST" ]]; then
+    warn "No manifest found at $MANIFEST"
+    info "Run './doc-check.sh --prepare' first, or use './doc-check.sh' to run both phases"
+    exit 1
+  fi
+
+  local first_line
+  first_line=$(head -1 "$MANIFEST")
+
+  if [[ "$first_line" != "NONE" ]]; then
+    while IFS=$'\t' read -r original tmp; do
+      [[ -z "$original" || -z "$tmp" ]] && continue
+      [[ ! -f "$tmp" ]] && { warn "Temp file missing for $original — skipping"; continue; }
+
+      echo ""
+      hr
+      warn "Review: $original"
+      hr
+      show_diff "$original" "$tmp"
+      hr
+      echo ""
+
+      while true; do
+        read -rp "  Approve? [y]es / [n]o / [e]dit  → " choice </dev/tty
+        case "$choice" in
+          y|Y|yes)
+            cp "$tmp" "$original"
+            git add "$original"
+            ok "Staged: $original"
+            (( docs_refreshed++ )) || true
+            break ;;
+          n|N|no)
+            warn "Skipped: $original"
+            break ;;
+          e|E|edit)
+            "${EDITOR:-vi}" "$tmp" </dev/tty ;;
+          *) warn "Enter y, n, or e" ;;
+        esac
+      done
+      rm -f "$tmp"
+    done < "$MANIFEST"
+  fi
+
+  rm -f "$MANIFEST"
+
+  echo ""
+  if [[ -z "$COMMIT_MSG" ]]; then
+    read -rp "Commit message: " COMMIT_MSG </dev/tty
+  fi
+  [[ -z "$COMMIT_MSG" ]] && { err "Commit message cannot be empty"; exit 1; }
+
+  (( docs_refreshed > 0 )) && COMMIT_MSG="${COMMIT_MSG} [docs refreshed]"
+
+  info "Committing: $COMMIT_MSG"
+  git commit -m "$COMMIT_MSG"
   echo ""
 
   read -rp "Push now? [Y/n] " push_choice </dev/tty
@@ -251,4 +290,16 @@ main() {
   fi
 }
 
-main "$@"
+# ── full (single terminal, both phases) ──────────────────────────────────────
+cmd_full() {
+  cmd_prepare
+  echo ""
+  cmd_commit
+}
+
+# ── dispatch ──────────────────────────────────────────────────────────────────
+case "$MODE" in
+  prepare) cmd_prepare ;;
+  commit)  cmd_commit  ;;
+  full)    cmd_full    ;;
+esac
