@@ -10,13 +10,12 @@ The refresh system is **purely git-based**. It never calls the Claude API just t
 whether a doc is stale. Detection is a fast, local operation:
 
 1. Each generated doc carries frontmatter with the `git_sha` at generation time and a list of `source_files`
-2. The refresh script runs `git diff <stored_sha>..HEAD --name-only`
+2. `doc-check.sh` reads `git diff <stored_sha>..HEAD --name-only`
 3. If any `source_files` appear in the changed list → the doc is marked stale
-4. Only when you explicitly pass `--auto` does the script call the Claude API to regenerate
+4. The Claude API is only called to regenerate docs the developer explicitly approves
 
 This means:
-- The git post-merge hook runs in milliseconds with zero API cost
-- CI/CD staleness checks are cheap enough to run on every PR
+- Staleness detection runs in milliseconds with zero API cost
 - The Claude API is only invoked when you actually want the content updated
 
 ---
@@ -34,7 +33,6 @@ source_files:
 ---
 ```
 
-If bash is available:
 ```bash
 git diff <stored_git_sha>..HEAD --name-only
 ```
@@ -45,29 +43,54 @@ Only surface this to the user if the stale doc is needed for the current questio
 
 ---
 
-## Manual refresh
+## Local pre-commit refresh (doc-check.sh)
 
-When user triggers refresh:
-1. Run `npx tsx scripts/refresh.ts --check-only` (or `python scripts/refresh.py --check-only` for non-Node repos) to see which docs are stale
-2. For each stale doc: read the changed source files, regenerate using templates in `references/doc-templates.md`
-3. Update `git_sha` in regenerated docs to current HEAD SHA
-4. Update KNOWLEDGE.md flows index status back to `✅ ready`
+The primary refresh mechanism is `doc-check.sh` — a plain bash script developers run
+**instead of** `git commit` when they want docs kept in sync.
+
+**Setup** (copy once to repo root):
+```bash
+cp .claude/skills/repo-expert/doc-check.sh ./doc-check.sh
+chmod +x doc-check.sh
+```
+
+**Workflow:**
+```bash
+git add src/orders/orders.service.ts   # stage your code changes
+./doc-check.sh "feat: add retry logic" # run instead of git commit
+```
+
+**What it does:**
+1. Aborts if nothing is staged
+2. Scans `docs/expert/*.md` and `KNOWLEDGE.md` for stale frontmatter
+3. For each stale doc: calls `claude --print` (headless, non-interactive) with a regeneration prompt
+4. Shows a coloured `diff` for each regenerated doc — developer chooses `y / n / e(dit)`
+5. Approved docs are `git add`-ed automatically
+6. Prompts for a commit message (or accepts it as `$1`), appends `[docs refreshed]` when docs were updated
+7. Commits all staged changes (code + approved docs) in a single atomic commit
+8. Optionally pushes immediately
+
+**Configurable via env vars:**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DOCS_DIR` | `docs/expert` | Where flow docs live |
+| `KNOWLEDGE_FILE` | `KNOWLEDGE.md` | Master index file |
+| `SKILL_DIR` | `.claude/skills/repo-expert` | Path to this skill |
 
 ---
 
-## Automated refresh (set up during Bootstrap)
+## How Claude regenerates a doc (when invoked by doc-check.sh)
 
-Run once to install hooks and CI workflow:
-```bash
-npx tsx scripts/refresh.ts --install-hooks
-```
+When `claude --print` is called for a stale doc, follow these steps:
 
-This generates:
-- `.git/hooks/post-merge` — zero-cost staleness check after every pull/merge (no API key needed)
-- `.github/workflows/repomind-refresh.yml` — marks stale docs on every PR merge; regenerates only when `--auto` flag is set
+1. Read the current doc — preserve its section structure and frontmatter keys
+2. Read every file listed in `source_files` that appears in the git diff
+3. Regenerate the doc using the same template from `references/doc-templates.md`
+4. Update frontmatter:
+   - `git_sha` → current `HEAD` SHA (`git rev-parse HEAD`)
+   - `generated` → today's date
+5. Output **only** the complete updated doc — no explanation, no markdown fences wrapping it
 
-**Key architecture decision:** The GitHub Actions workflow runs in two modes:
-- **Check mode** (default, no secrets needed): marks docs as stale in KNOWLEDGE.md, opens a PR comment listing what needs refresh
-- **Auto mode** (requires `ANTHROPIC_API_KEY` secret): regenerates stale docs and commits them
-
-This separates staleness detection (always free, always runs) from AI regeneration (opt-in, costs tokens).
+**Key constraint:** Never invent information. If a source file no longer contains
+something the doc referenced, remove that section rather than leaving stale content.
