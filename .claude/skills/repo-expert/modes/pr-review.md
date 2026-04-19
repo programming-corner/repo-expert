@@ -99,7 +99,13 @@ user pastes a git diff, or provides a GitHub PR URL.
 - Blocking calls inside async Tokio tasks (use `spawn_blocking`)
 
 ### Universal (all stacks)
-- Secrets or credentials hardcoded or logged
+- Secrets or credentials hardcoded or logged — flag any of:
+  - `AKIA[0-9A-Z]{16}` (AWS access key)
+  - `-----BEGIN (RSA|EC|PRIVATE) KEY-----` (private key headers)
+  - Bearer tokens or API keys assigned to hardcoded string literals
+  - Passwords or secrets in migration files or SQL scripts
+  - `.env` values committed directly (not via `process.env` / config layer)
+  - API keys or tokens in test fixtures or seed files
 - Missing rate limiting on auth or public endpoints
 - SQL injection risk (string interpolation in queries)
 - Missing pagination on list endpoints

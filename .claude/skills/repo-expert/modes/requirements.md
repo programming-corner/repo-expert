@@ -74,6 +74,7 @@ across turns. Stop asking when you have enough to propose a solution confidently
 
 ## Phase 2: Solution proposal — runs after discovery is complete
 
+
 Once all critical questions are resolved, present the approach and the list of
 recommended changes — but **do not build anything yet**.
 
@@ -92,7 +93,7 @@ Present ONLY this block first:
 
 ---
 
-## Phase 2.5: Change-by-change approval — mandatory before any code
+## Phase 3: Change-by-change approval — mandatory before any code
 
 After presenting the approach, walk through every recommended change **one at a time**
 and get explicit agreement before moving to the next. Do not dump all changes in a
@@ -142,7 +143,7 @@ Wait for the delivery choice. Do not generate any implementation until they answ
 
 ---
 
-## Phase 3: Delivery — only approved changes are built
+## Phase 4: Delivery — only approved changes are built
 
 Build scope = exactly the changes marked ✅ in Phase 2.5. Never include skipped (❌) changes.
 

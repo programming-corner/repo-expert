@@ -9,7 +9,7 @@ description: >
   design X", or any question about a specific codebase. Also trigger on: "repo expert", "repomind",
   "boot the expert", "learn this repo", "code review", "impact analysis", "frontend architecture",
   "backend design", "database schema", "queue design", "testing strategy", "PR review".
-  Covers ALL stacks: Node.js · Python · Go · Java · Ruby · PHP · Rust · .NET · any frontend.
+  Covers ALL stacks: Node.js · Python · Go · Java · Ruby · PHP · Rust · any frontend.
   This skill ALWAYS reads the repo before answering — never guess about codebase-specific details.
 ---
 
