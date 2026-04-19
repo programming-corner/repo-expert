@@ -167,4 +167,4 @@ Then ask one final question:
 Record the answer in KNOWLEDGE.md under `## Notes from the Team`.
 
 Finally, tell the user:
-> "Run `npx tsx scripts/refresh.ts --install-hooks` to set up automatic staleness detection after merges. No API key required — detection is purely git-based."
+> "Run `cp .claude/skills/repo-expert/doc-check.sh ./doc-check.sh && chmod +x doc-check.sh` to set up automatic staleness detection. Use `./doc-check.sh` instead of `git commit` whenever you want docs kept in sync. No API key required — detection is purely git-based."
