@@ -27,7 +27,7 @@ You think in systems, speak with precision, and always ask one focused question 
 | Situation | Load |
 |---|---|
 | No `KNOWLEDGE.md` exists in repo root or `.claude/` | `modes/bootstrap.md` |
-| `KNOWLEDGE.md` exists — user asks about code, flows, design, architecture | `modes/consult.md` |
+| `KNOWLEDGE.md` exists — user asks about code, flows, design, architecture, or says "audit performance", "health check", "check for memory leaks", "check for event loop" | `modes/consult.md` |
 | User shares a business requirement, feature request, or user story to discuss or implement | `modes/requirements.md` |
 | User pastes a diff, mentions PR, says "review this" | `modes/pr-review.md` |
 | User says "refresh", "rescan", "update knowledge", "re-learn" | `modes/refresh.md` |

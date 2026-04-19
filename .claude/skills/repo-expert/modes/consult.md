@@ -102,6 +102,76 @@ Output format:
 ### Migration Strategy: ...
 ```
 
+### Performance & Health Audit
+> "audit performance" / "check for memory leaks" / "audit performance for orders" / "health check the payment flow"
+
+Load `references/backend/nodejs-core.md`.
+
+**Scope detection:**
+- No flow named → **repo-wide**: scan all `*.service.ts`, `*.controller.ts`, `*.processor.ts`, `*.consumer.ts`, `*.interceptor.ts`, `*.middleware.ts`, `*.gateway.ts`
+- Flow named (e.g. "for orders", "for the payment flow") → **flow-scoped**: load `docs/expert/<flow>.md`, read its `source_files` frontmatter list, scan only those files. If the flow doc doesn't exist, fall back to grepping for files matching the flow name.
+
+**Scan protocol — check every file in scope against all patterns:**
+
+1. **Memory leaks**
+   - `emitter.on(` / `.addListener(` inside a method body (not constructor) → listener leak risk
+   - `setInterval(` / `setTimeout(` result not stored in a class property → timer leak risk
+   - `new Map(` / `new Set(` / `[]` / `{}` at module scope used as a cache with no eviction / max size
+   - `.pipe(` or `fetch(` / `axios(` with no `.destroy()` / `.cancel()` / `.body?.cancel()` on error path → stream leak
+   - `scope: Scope.REQUEST` on any `@Injectable` → heap churn at scale
+   - No `app.enableShutdownHooks()` in `main.ts` / no `OnApplicationShutdown` / `onModuleDestroy` on DB or Redis providers
+
+2. **Event loop blocking**
+   - `fs.readFileSync` / `fs.writeFileSync` / `fs.existsSync` anywhere in a request handler or service method
+   - `crypto.pbkdf2Sync` / `crypto.scryptSync` / `crypto.randomBytes` (sync overload) in hot paths
+   - `JSON.parse` / `JSON.stringify` with no payload size guard
+   - Regex with nested quantifiers: `(x+)+`, `(.*)+`, `([a-z]+)*` → ReDoS risk
+   - Sequential `await` calls on independent operations (no `Promise.all`)
+   - Long `for` / `while` loops over arrays without `setImmediate` yield
+   - Any `*Sync` method from any import in a route handler or queue processor
+
+3. **NestJS-specific health**
+   - `scope: Scope.REQUEST` used (already in memory leaks — double-flag with note)
+   - Interceptors that call `JSON.stringify` on the full response body
+   - Missing `ValidationPipe` global setup in `main.ts`
+   - `@Cron` handlers that do heavy synchronous work
+
+**Output format:**
+
+```
+## Node.js Performance Audit — [Repo Name | <Flow> flow]
+Scope: [repo-wide | <flow>.md source files]
+Files scanned: N
+
+### 🔴 Memory Leak Risks
+| File | Issue |
+|---|---|
+| orders.service.ts:45 | emitter.on() inside processOrder() — listener never removed |
+
+### 🟡 Event Loop Blocking
+| File | Issue |
+|---|---|
+| report.service.ts:120 | JSON.stringify(result) with no payload size guard |
+
+### 🟠 NestJS Health
+| File | Issue |
+|---|---|
+| main.ts | enableShutdownHooks() not called |
+
+### ✅ Clean areas
+- No sync I/O found in route handlers
+- No unbounded module-level caches
+
+### Recommended diagnostics to add
+- [ ] Event loop lag monitor (setInterval delta check) in main.ts
+- [ ] process.memoryUsage() logging every 30s
+- [ ] express.json / body-parser payload limit set to ≤ 1mb
+```
+
+Severity key: 🔴 likely leak/block in production · 🟡 risk under load · 🟠 NestJS lifecycle issue · ✅ clean
+
+---
+
 ### Technical Debt
 > "What's the debt in this module?" / "Where are the biggest risks?"
 
