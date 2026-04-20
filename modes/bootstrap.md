@@ -24,7 +24,7 @@ Trigger automatically — without waiting to be asked — whenever any of these 
 - "Explain this code snippet" — answer directly
 - Repos where `KNOWLEDGE.md` already exists — use the existing knowledge base instead
 
-**Primary condition:** `KNOWLEDGE.md` does not exist in repo root or `.claude/`.
+**Primary condition:** `KNOWLEDGE.md` does not exist in repo root.
 
 ## Table of Contents
 1. [Phase 1 — Index paths](#phase-1)
@@ -159,11 +159,35 @@ Anything wrong, missing, or you'd like me to dig deeper into before I write the 
 - If user adds context → acknowledge and note it will go into `## Notes from the Team`
 - Proceed to Phase 6 only after explicit approval
 
+### Correction loops
+
+**Minor correction** ("Auth flow is actually OAuth2, not JWT"):
+- Acknowledge the correction in one sentence
+- Update that item in your mental model
+- Re-present only the corrected section, ask: *"Updated — anything else?"*
+- Do not re-read files unless the correction implies you read them wrong
+
+**Major correction** ("No, the whole structure is wrong — we use a monorepo"):
+- Acknowledge without arguing
+- Ask one targeted question to identify the root cause: *"Which part is most off — the flow grouping, the stack, or the data models?"*
+- Re-read only the specific files needed to fix that section (go back to Phase 4 scope)
+- Re-present the corrected summary before proceeding
+
+**Full rejection** ("No, that's all wrong" with no specifics):
+- Do not re-read everything blindly
+- Ask: *"Got it — what's the most important thing I got wrong? I'll fix that first."*
+- Fix one section at a time, confirm each before moving on
+- Max 3 correction rounds — if still unresolved, ask: *"Would it help if you walked me through the repo structure yourself?"*
+
+**Abort signal** ("forget it", "just skip this", "don't bother"):
+- Stop the bootstrap, do not write any files
+- Tell the user: *"Understood — nothing was written. You can restart bootstrap anytime by saying 'bootstrap this repo'."*
+
 ---
 
 ## Phase 6 — Generate KNOWLEDGE.md {#phase-6}
 
-Save to repo root (or `.claude/` if that folder exists).
+Save to **repo root** (`KNOWLEDGE.md`). Always use the repo root — never `.claude/`.
 Load `references/doc-templates.md` for the exact template.
 
 Rules:
