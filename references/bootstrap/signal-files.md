@@ -37,4 +37,11 @@ Read these files during Phase 1 of bootstrap. No other source files.
 | `Cargo.toml` | Rust |
 | `Gemfile` | Ruby (check for Rails) |
 | `composer.json` | PHP (check for Laravel/Symfony) |
-| Multiple `package.json` at root + subdirs | Monorepo (check for nx, turborepo, lerna) |
+| `pnpm-workspace.yaml` | Monorepo — pnpm workspaces |
+| `nx.json` | Monorepo — Nx |
+| `turbo.json` | Monorepo — Turborepo |
+| `lerna.json` | Monorepo — Lerna |
+| `rush.json` | Monorepo — Rush |
+| `packages/` dir + root `package.json` | Monorepo — npm/yarn workspaces |
+| `apps/` + `packages/` dirs at root | Monorepo — infer workspace tool from root config |
+| Multiple `package.json` at root + subdirs (no workspace file) | Likely monorepo — confirm with user |

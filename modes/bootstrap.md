@@ -72,6 +72,18 @@ Frontend areas identified (N):
 2. 👤 Profile UI        (app/profile/)
 ```
 
+Then generate a **high-level Mermaid architecture diagram** from signal files alone — always, regardless of repo complexity:
+
+```mermaid
+graph TD
+  Client["Client / Frontend"] --> API["API Layer"]
+  API --> DB[(Database)]
+  API --> Queue[("Queue / Jobs")]
+  API --> Cache[(Cache)]
+```
+
+Use only what you can confirm from signal files. Omit boxes that have no evidence. Label nodes with real service/framework names (e.g. `NestJS API`, `PostgreSQL`, `BullMQ`).
+
 ---
 
 ## Phase 3 — Ask user before reading anything deeper {#phase-3}
