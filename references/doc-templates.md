@@ -47,20 +47,45 @@ git_sha: {{GIT_SHA}}
 | {{term}} | {{definition as used in this codebase}} |
 
 ## Architecture Overview
-```
-{{Describe how layers connect — example:}}
 
-  Next.js (SSR / App Router)
-       ↓ API calls
-  NestJS REST API
-       ↓              ↓
-  Service Layer    Queue Processors (BullMQ)
-       ↓               ↓
-  Repository     Redis (cache + jobs)
-       ↓
-  PostgreSQL (Prisma)
-       ↓
-  External: Stripe · SendGrid · S3
+```mermaid
+graph TD
+    {{Describe how layers connect as a Mermaid graph — example:}}
+
+    subgraph App["App — NestJS API"]
+        A1["HTTP Controllers"]
+        A2["Service Layer"]
+        A3["Queue Processors\nBullMQ"]
+        A4[("Repository\nPostgreSQL / Prisma")]
+        A5[("Redis\ncache + jobs")]
+        A1 --> A2
+        A2 --> A4
+        A2 --> A3
+        A3 --> A5
+    end
+
+    subgraph Front["Frontend — Next.js (SSR)"]
+        F1["App Router / Pages"]
+    end
+
+    F1 -->|API calls| A1
+
+    subgraph Ext["External Services"]
+        E1["Stripe\npayments"]
+        E2["SendGrid\nemail"]
+        E3["S3\nobject storage"]
+    end
+
+    A2 --> E1
+    A2 --> E2
+    A2 --> E3
+
+    subgraph Shared["Shared libs"]
+        S1["auth · logger · config\ncache · guards · interceptors"]
+    end
+
+    App -.uses.-> Shared
+    Front -.uses.-> Shared
 ```
 
 ## Flows Index
