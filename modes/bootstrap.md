@@ -1,69 +1,71 @@
-# Mode: Bootstrap — First Time in a Repo
+# Mode: Bootstrap — Onboard to Any Codebase
 
-Triggered when `KNOWLEDGE.md` does not exist in repo root or `.claude/`.
+## When to trigger this skill
+
+Trigger automatically — without waiting to be asked — whenever any of these are true:
+
+**Explicit onboarding signals:**
+- "I just joined this team" / "I'm new to this repo"
+- "Explain this codebase to me" / "give me an overview"
+- "What's the tech stack?" / "how is this project structured?"
+- User provides a repo path or GitHub URL with no other context
+
+**Documentation requests:**
+- "Document this system" / "document our API"
+- "Generate an architecture diagram" / "create a knowledge base"
+- "Write docs for this repo"
+
+**Understanding requests (when KNOWLEDGE.md does not exist):**
+- "How does X work in our code?" — if no knowledge base exists yet, bootstrap first, then answer
+- "Walk me through the codebase" / "explain the flows"
+
+**Do NOT trigger for:**
+- "Document this function/file" — too narrow, answer directly
+- "Explain this code snippet" — answer directly
+- Repos where `KNOWLEDGE.md` already exists — use the existing knowledge base instead
+
+**Primary condition:** `KNOWLEDGE.md` does not exist in repo root or `.claude/`.
+
+## Table of Contents
+1. [Phase 1 — Index paths](#phase-1)
+2. [Phase 2 — Identify flows](#phase-2)
+3. [Phase 3 — Ask user for selection](#phase-3)
+4. [Phase 4 — Read selected flows](#phase-4)
+5. [Phase 5 — Validate with user](#phase-5)
+6. [Phase 6 — Generate KNOWLEDGE.md](#phase-6)
+7. [Phase 7 — Generate flow docs](#phase-7)
+8. [Phase 8 — Commit to GitHub](#phase-8)
 
 ---
 
-## Phase 1 — Index all paths (no source reads yet)
+## Phase 1 — Index all paths (no source reads yet) {#phase-1}
 
 Run a directory listing to collect all paths without reading file contents.
 Goal: build a structural map cheaply before touching any source code.
 
-### What to list
+**What to list:**
 - All top-level directories and files
 - Second-level directories (e.g. `src/orders/`, `src/auth/`, `apps/api/`)
-- Filenames only — do NOT read file contents in this phase (except signal files below)
+- Filenames only — do NOT read file contents in this phase (except signal files)
 
-### Signal files — read these only (stack detection)
+**Then load signal files for stack detection:**
+→ See `references/bootstrap/signal-files.md`
 
-| File | What it tells you |
-|---|---|
-| `README.md` | Always read first |
-| `.env.example`, `config/` | Integration names and env var keys — never surface actual values |
-| `docker-compose.yml` / `docker-compose.yaml` | Local infra: DBs, Redis, queues |
-| `Dockerfile` | Runtime container |
-| `.github/workflows/` | CI/CD pipeline |
-| `Makefile` | Common task targets |
-| `package.json` | Runtime, framework, scripts, deps |
-| `tsconfig.json` | TypeScript, path aliases |
-| `nest-cli.json` | NestJS confirmed |
-| `next.config.*` | Next.js |
-| `pyproject.toml`, `requirements.txt` | Python deps |
-| `go.mod` | Go modules |
-| `pom.xml`, `build.gradle` | Java/Kotlin deps |
-| `Cargo.toml` | Rust crates |
-| `Gemfile` | Ruby deps |
-| `composer.json` | PHP deps |
-| `prisma/schema.prisma` | Data models — read all models |
-| `migrations/`, `db/` | DB schema history |
-
-> Read ONLY the signal files above. Do not open controllers, services, handlers, or any domain source files yet.
+> Read ONLY the signal files listed there. Do not open controllers, services, handlers, or any domain source files yet.
 
 ---
 
-## Phase 2 — Identify flows and areas from structure
+## Phase 2 — Identify flows and areas from structure {#phase-2}
 
-From the indexed paths and signal files alone, infer:
+From indexed paths and signal files alone, infer flows and areas.
+→ See `references/bootstrap/flow-patterns.md` for naming conventions.
 
-**Backend flows** — named by folder/file patterns:
-- `src/<domain>/` folders → one flow per domain (e.g. `src/orders/` → Order flow)
-- `*.controller.ts`, `views.py`, `routes/*.go`, `handlers/` → API surface hints
-- `*.processor.ts`, `*.consumer.ts`, `*worker*`, `celery*.py` → Queue/async flows
-- `*.gateway.ts`, `*websocket*` → Realtime flows
-- `migrations/` → DB migration flow
-
-**Frontend areas** — named by folder/page patterns:
-- `app/<section>/` or `pages/<section>/` → one area per route group
-- `components/<name>/` → component area if large enough
-- `store/` or `context/` → State management area
-
-Produce a numbered list like:
+Produce a numbered list:
 ```
 Backend flows identified (N):
 1. 🔄 Order flow        (src/orders/)
 2. 🔐 Auth flow         (src/auth/)
 3. 📦 Queue processing  (src/jobs/)
-4. 💳 Payment flow      (src/payments/)
 
 Frontend areas identified (N):
 1. 🛍️ Checkout UI       (app/checkout/)
@@ -72,9 +74,9 @@ Frontend areas identified (N):
 
 ---
 
-## Phase 3 — Ask user before reading anything deeper
+## Phase 3 — Ask user before reading anything deeper {#phase-3}
 
-Present the indexed list to the user. Do NOT read any source files yet.
+Present the indexed list. Do NOT read any source files yet.
 
 ```
 I've scanned the repo structure. Here's what I found:
@@ -83,61 +85,49 @@ I've scanned the repo structure. Here's what I found:
 Stack: [detected stack]
 Type: [Backend API / Fullstack / SPA / Monorepo / CLI / Library]
 
-Backend flows identified (N):
-1. 🔄 [Flow name]    ([path])
-2. 🔐 [Flow name]    ([path])
+Backend flows (N):
+1. 🔄 [Flow name]   ([path])
 ...
 
-Frontend areas identified (N):   ← omit if no frontend
+Frontend areas (N):   ← omit if no frontend
 1. [icon] [Area name]  ([path])
 ...
 
 Which flows or areas should I document now?
-(I'll read the source files only for what you select — the rest stay as lazy entries in the index)
+- **All** — fastest full onboarding
+- **A subset** — recommended for large repos (e.g. "just auth and orders")
+- **None** — pure index mode, all flows stay lazy
 ```
 
-Wait for the user's selection before proceeding. Do not assume. Do not read source files speculatively.
+**Selection modes — how to interpret user responses:**
+
+| User says | Interpret as |
+|---|---|
+| "all", "everything", "the whole thing" | Select all flows |
+| "just X and Y", "only X", "X, Y, Z" | Select named flows only |
+| "everything except X", "skip tests" | All flows minus excluded |
+| "none", "I'll explore on my own", "just index it" | Pure index — all lazy |
+| A number or list of numbers | Select flows by position in the list |
+
+**Rules:**
+- If ambiguous, confirm: *"Just to confirm — you want X and Y documented, everything else lazy?"*
+- Never assume "all" as a default — always wait for an explicit answer
+- Do not read source files speculatively while waiting
 
 ---
 
-## Phase 4 — Lazy load: read source files for selected flows only
+## Phase 4 — Read source files for selected flows only {#phase-4}
 
-For each **selected** flow or area, now read the relevant source files:
-
-**Backend (Node.js / NestJS):**
-- `*.module.ts` → module boundaries
-- `*.controller.ts` → API surface
-- `*.service.ts` → business logic
-- `*.entity.ts` / `*.schema.ts` → data model
-- `*.processor.ts` / `*.consumer.ts` → queue workers
-- `*.guard.ts` / `*.interceptor.ts` → cross-cutting concerns
-
-**Backend (Python / Go / Java / Rust):**
-- Routing files (`views.py`, `routes/`, `handlers/`) → API surface
-- Service/domain files → business logic
-- Model/schema files → data model
-- Worker/task files → async processing
-
-**Frontend (Next.js / React):**
-- `app/` or `pages/` → routing structure
-- `components/` → component library shape
-- `hooks/` → custom hook patterns
-- `store/` / `context/` → state management
-- `lib/` / `utils/` → shared utilities
-
-**Shared:**
-- `types/` / `interfaces/` / `dto/` → shared contracts
-- `constants/` / `config/` → configuration shape
+For each **selected** flow, read the relevant source files.
+→ See `references/bootstrap/stack-templates.md` for what to read per stack.
 
 > For **unselected** flows: do not read their source files. Mark them `🔵 lazy` in KNOWLEDGE.md.
 
 ---
 
-## Phase 5 — Validate with user before writing anything
+## Phase 5 — Validate with user before writing anything {#phase-5}
 
-Before generating any files, present a structured summary of everything learned and ask for corrections or additions.
-
-Present it like this:
+Before generating any files, share a structured summary and wait for approval.
 
 ```
 Here's what I learned — does this look right?
@@ -147,63 +137,54 @@ Here's what I learned — does this look right?
 **Type:** [Backend API / Fullstack / SPA / Monorepo / CLI / Library]
 
 **Flows I understood (selected):**
-- 🔄 [Flow name] — [1-sentence summary of what this flow does]
+- 🔄 [Flow name] — [1-sentence summary]
 - 🔐 [Flow name] — [1-sentence summary]
-...
 
-**Flows I'll index but NOT document yet (lazy):**
+**Flows indexed but not documented yet (lazy):**
 - 🔵 [Flow name] ([path])
-...
 
-**Key contracts / data models I found:**
+**Key data models found:**
 - [EntityName] — [what it represents]
-...
 
 **Integrations / external services detected:**
 - [Service] via [env var or SDK]
-...
 
 Anything wrong, missing, or you'd like me to dig deeper into before I write the docs?
-(You can also share business rules, quirks, or naming conventions I should record)
+(You can also share business rules, quirks, or naming conventions to record)
 ```
 
-Wait for user response. Do NOT write any files until the user confirms or says "looks good".
-
-If the user corrects something:
-- Acknowledge the correction
-- Update your understanding
-- Re-present only the changed section, confirm again
-
-If the user adds context (business rules, quirks, naming):
-- Acknowledge and say where you'll record it (KNOWLEDGE.md under `## Notes from the Team`)
+**Rules:**
+- Do NOT write any files until the user confirms or says "looks good"
+- If user corrects something → acknowledge, update understanding, re-present only the changed section
+- If user adds context → acknowledge and note it will go into `## Notes from the Team`
 - Proceed to Phase 6 only after explicit approval
 
 ---
 
-## Phase 6 — Generate KNOWLEDGE.md
+## Phase 6 — Generate KNOWLEDGE.md {#phase-6}
 
 Save to repo root (or `.claude/` if that folder exists).
 Load `references/doc-templates.md` for the exact template.
 
 Rules:
-- KNOWLEDGE.md must be lean — max ~200 lines. It is the index, not the encyclopedia.
-- In `## Flows Index`, mark selected flows as `✅ ready` and unselected flows as `🔵 lazy`.
-- `🔵 lazy` flows have a doc path but the file does not exist yet — it will be generated on demand.
-- Incorporate all corrections and additions confirmed in Phase 5.
-- Record any business rules, quirks, or naming conventions from Phase 5 under `## Notes from the Team`.
+- Max ~200 lines — it is the index, not the encyclopedia
+- Mark selected flows `✅ ready`, unselected flows `🔵 lazy`
+- `🔵 lazy` entries have a doc path but no file yet — generated on demand
+- Incorporate all corrections and additions confirmed in Phase 5
+- Record business rules, quirks, and naming conventions under `## Notes from the Team`
 
 ---
 
-## Phase 7 — Generate docs for selected flows
+## Phase 7 — Generate docs for selected flows {#phase-7}
 
-After writing KNOWLEDGE.md, generate one doc per selected flow using templates from `references/doc-templates.md`.
+Generate one doc per selected flow using templates from `references/doc-templates.md`.
 Save each to `docs/expert/<slug>.md`.
 
 ---
 
-## Phase 8 — Commit knowledge base to GitHub
+## Phase 8 — Commit knowledge base to GitHub {#phase-8}
 
-After all files are written, stage and commit them:
+Stage and commit only files written during this bootstrap session:
 
 ```bash
 git add KNOWLEDGE.md docs/expert/
@@ -215,13 +196,125 @@ git push
 ```
 
 Rules:
-- Only commit files written during this bootstrap session (`KNOWLEDGE.md`, `docs/expert/*.md`).
-- Do NOT commit source files, `.env`, secrets, or anything outside the knowledge base.
-- If the repo has no remote, skip push and tell the user: "Committed locally — no remote configured."
-- If push fails (e.g. branch protection), tell the user the exact error and suggest: `git push origin HEAD`.
+- Do NOT commit source files, `.env`, secrets, or anything outside the knowledge base
+- No remote → skip push, tell user: "Committed locally — no remote configured."
+- Push fails → show exact error, suggest: `git push origin HEAD`
 
-Finally, tell the user:
-> "Knowledge base is ready and committed. Unselected flows are indexed as lazy — just ask about any of them and I'll read the source and generate the doc on demand. To rescan or update, say **refresh** or **rescan**."
+Tell the user:
+> "Knowledge base is ready and committed. Unselected flows are lazy — ask about any of them and I'll generate the doc on demand. To rescan, say **refresh** or **rescan**."
+
+---
+
+## Edge Cases
+
+### Monorepo with 10+ apps
+
+Do NOT create one flow per app — that produces an unnavigable list.
+
+**Rule:** Group by type, then surface as expandable clusters:
+```
+Apps cluster (12 apps):
+  📦 api-gateway         (services/api-gateway/)
+  📦 order-service       (services/orders/)
+  📦 payment-service     (services/payments/)
+  ... and 9 more — say "list all services" to expand
+```
+
+In Phase 3, ask: *"This is a large monorepo. Should I document all apps, a cluster (e.g. just backend services), or let you pick individually?"*
+
+In KNOWLEDGE.md, group lazy entries under a `## Apps` cluster rather than a flat list.
+
+---
+
+### Hybrid / polyglot repo (e.g. Node.js + Go microservices)
+
+Run stack detection per service directory, not per repo root.
+
+**Rule:** Detect stack at the app/service level, not globally:
+```
+Stack: Polyglot
+  api-gateway    → Node.js / NestJS
+  payments       → Go
+  data-pipeline  → Python
+```
+
+In Phase 4, load the correct stack template from `references/bootstrap/stack-templates.md` per service — do not apply Node.js patterns to Go code.
+
+---
+
+### No README or no package.json
+
+If neither exists, do not abort — degrade gracefully:
+
+| Missing | Fallback |
+|---|---|
+| No `README.md` | Infer repo purpose from folder names and any `.md` file at root |
+| No package manager file | Detect stack from file extensions (`.go`, `.py`, `.rs`, etc.) |
+| No signal files at all | Report to user: "I couldn't detect the stack automatically — what language/framework is this?" |
+
+Never guess a stack without evidence. If truly ambiguous, ask before Phase 2.
+
+Special cases:
+- **Jupyter notebooks (`.ipynb`)** → Type: `Data / ML`. Flows = notebooks grouped by topic folder.
+- **Shell scripts only** → Type: `Scripts / Infra`. Flows = script groups by prefix or folder.
+- **Terraform / Ansible** → Type: `Infrastructure`. Flows = resource groups (e.g. `networking/`, `compute/`).
+
+---
+
+### Private packages / git submodules
+
+**Submodules** — do not recurse into them during Phase 1. List the submodule path and name only:
+```
+🔗 Submodule: libs/shared-types  (external — not indexed)
+```
+
+Mark submodule contents `🔗 external` in KNOWLEDGE.md. Never read files inside a submodule.
+
+**Private packages** (e.g. `@company/sdk` in `node_modules` or a private registry) — do not read their source. Reference them by package name only in the integration list.
+
+If a submodule is critical to understanding a flow, tell the user: *"This flow depends on `libs/shared-types` (submodule) — should I index it separately?"*
+
+---
+
+## Lazy Loading Contract
+
+Defines exactly what a lazy flow is, how it's stored, and how it triggers.
+
+### Stub format in KNOWLEDGE.md
+
+```
+| 🔵 lazy | Payment flow | docs/expert/payment.md | (not read yet) |
+```
+
+Every lazy entry must have: status icon, flow name, doc path, and `(not read yet)` marker.
+
+### Trigger detection
+
+Claude auto-detects a lazy flow trigger when the user:
+- Asks about it by name: *"tell me about the payment flow"*
+- References its domain: *"how does billing work?"*, *"walk me through checkout"*
+- Asks to fix/modify something inside it: *"why is the payment failing?"*
+
+No special command needed — Claude detects intent from context.
+
+### On trigger: run mini-bootstrap for that flow only
+
+1. **Phase 4** — read source files for the triggered flow only (see `references/bootstrap/stack-templates.md`)
+2. **Phase 5** — share what was learned, ask user to confirm before writing
+3. **Phase 6** — generate `docs/expert/<slug>.md` using `references/doc-templates.md`
+4. **Update KNOWLEDGE.md** — replace the lazy stub:
+
+```
+| ✅ ready | Payment flow | docs/expert/payment.md | |
+```
+
+5. **Commit** — stage and push the new doc + updated KNOWLEDGE.md
+
+### Rules
+
+- Never answer questions about a lazy flow from assumption — always read first
+- If source files for the flow no longer exist, tell the user and remove the stub
+- A flow stays `🔵 lazy` until its doc is fully generated and committed
 
 ---
 
