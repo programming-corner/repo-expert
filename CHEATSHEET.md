@@ -6,13 +6,18 @@
 ---
 
 ## 🚀 Bootstrap — First time in a repo
-_Triggers when no `KNOWLEDGE.md` exists yet_
+_Triggers when no `KNOWLEDGE.md` exists in repo root_
+_Writes `KNOWLEDGE.md` to **repo root** and flow docs to `docs/expert/`_
 
 | What you say | What happens |
 |---|---|
-| `learn this repo` | Full repo scan — detects stack, reads source files, writes KNOWLEDGE.md |
+| `learn this repo` | Full repo scan — detects stack, reads source files, writes KNOWLEDGE.md to repo root |
 | `boot the expert` | Same as above |
 | `explain this repo` | Same as above |
+| `what's the tech stack?` | Same — bootstraps if no knowledge base yet |
+| `walk me through the codebase` | Same |
+| `create a knowledge base` | Same |
+| `generate an architecture diagram` | Same — bootstraps first, then generates diagram |
 | `I just joined this team` | Same — also generates onboarding guide after scan |
 | `onboard me` | Same as above |
 
@@ -113,15 +118,17 @@ _Repo-wide or scoped to a specific flow_
 ---
 
 ## 🔀 PR Review
-_Triggered by diff content or PR reference_
+_Triggered by a diff, PR keyword, or GitHub PR URL — not by "review this" alone_
 
 | What you say | What happens |
 |---|---|
 | `review this PR` | Full structured review — risk level, critical issues, suggestions, positives, test gaps |
 | `review this diff` | Same |
-| `what does this change?` | Same |
+| `review pull request #N` | Same |
 | _(paste a git diff)_ | Auto-triggers PR review mode |
 | _(paste a GitHub PR URL)_ | Same — asks for diff if not accessible |
+
+> **Note:** "review this" alone routes to **Consult** (too ambiguous). Use "review this PR" or "review this diff" to trigger PR review.
 
 ---
 
@@ -144,8 +151,11 @@ _Discovery-first: never jumps to code before understanding the requirement_
 |---|---|
 | `we need to build X` | Phase 1: surfaces conflicts from codebase, asks one question at a time |
 | `the requirement is Y` | Same |
+| `the client wants Z` | Same |
+| `users should be able to X` | Same |
 | `add a feature that...` | Same |
 | `implement this story` | Same |
+| `new business rule: ...` | Same |
 | _(paste a PRD or Jira ticket)_ | Same — extracts requirement from the pasted text |
 
 **Delivery options after approval:**
