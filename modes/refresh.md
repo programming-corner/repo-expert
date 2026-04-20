@@ -45,26 +45,70 @@ source_files:
    - Run `git diff <stored_sha>..HEAD --name-only`
    - If any `source_files` appear in the diff → mark as stale
 
-Present findings before doing anything:
-
-```
-## Staleness Report
-
-✅ KNOWLEDGE.md — up to date
-⚠️  docs/expert/order-flow.md — stale (src/orders/orders.service.ts changed)
-⚠️  docs/expert/auth-flow.md — stale (src/auth/auth.service.ts changed)
-✅ docs/expert/payment-flow.md — up to date
-
-Regenerate stale docs? Reply: all / select [names] / cancel
-```
-
-Wait for user confirmation before regenerating anything.
+> **If no commits since last scan:** git diff returns nothing and no docs are stale — that is fine. Continue to Step 2 regardless. Never stop after Step 1.
 
 ---
 
-## Step 2 — Regenerate approved docs
+## Step 2 — Detect gaps in KNOWLEDGE.md
 
-For each doc the user approves, in sequence:
+**Always run this step — independent of git state.** A gap can exist even when no code has changed (e.g. KNOWLEDGE.md was generated before a new section was added to the template).
+
+Scan `KNOWLEDGE.md` for missing or empty sections.
+
+Check each required section from `references/doc-templates.md`:
+
+| Section | Gap condition |
+|---|---|
+| `## Architecture Overview` | Section missing OR contains no Mermaid block |
+| `## Tech Stack` | Section missing or has unfilled `{{placeholders}}` |
+| `## Domain Glossary` | Section missing |
+| `## Key Integrations` | Section missing |
+| `## Known Tech Debt` | Section missing |
+
+Also check for new flows not yet in the index:
+- List all top-level directories (same as bootstrap Phase 1)
+- Compare against flows listed in `## Flows Index`
+- Any directory that looks like a domain module but has no entry → mark as **new flow**
+
+---
+
+## Step 3 — Present full scan report
+
+Present **one combined report** covering both staleness and gaps before doing anything:
+
+```
+## Refresh Scan Report
+
+### Stale Docs
+✅ KNOWLEDGE.md — up to date
+⚠️  docs/expert/order-flow.md — stale (src/orders/orders.service.ts changed)
+⚠️  docs/expert/auth-flow.md — stale (src/auth/auth.service.ts changed)
+
+### Gaps in KNOWLEDGE.md
+❌ Architecture Overview — missing (no Mermaid diagram found)
+❌ Domain Glossary — section missing
+⚠️  New flow detected: src/notifications/ — not in flows index
+
+### Nothing to do
+✅ docs/expert/payment-flow.md — up to date
+✅ Key Integrations — present
+
+---
+What should I fix?
+- **all** — regenerate stale docs + fill all gaps
+- **gaps only** — fill missing sections, skip stale docs
+- **stale only** — regenerate stale docs, skip gaps
+- **select** — name specific items (e.g. "architecture diagram and order flow")
+- **cancel**
+```
+
+Wait for user confirmation before writing anything.
+
+---
+
+## Step 4 — Regenerate approved docs
+
+For each stale doc the user approves, in sequence:
 
 1. Read the current doc — preserve its section structure and frontmatter keys
 2. Check `schema_version` against the template in `references/doc-templates.md`
@@ -82,18 +126,54 @@ something the doc referenced, remove that section rather than leaving stale cont
 
 ---
 
-## Step 3 — Report completion
+## Step 5 — Fill approved gaps
 
-After all regenerations:
+For each approved gap, generate only the missing section — do not rewrite the whole file.
+
+### Architecture Overview (missing diagram)
+
+1. Re-read signal files (same set as bootstrap Phase 1) — do NOT re-read all source files
+2. Generate a Mermaid `graph TD` diagram using real names from signal files
+3. Insert the complete `## Architecture Overview` section into `KNOWLEDGE.md` after `## Tech Stack`
+4. Update `git_sha` and `generated` in KNOWLEDGE.md frontmatter
+
+### New flow detected
+
+For each new flow directory approved:
+1. Run bootstrap Phase 4 for that flow only (read its source files)
+2. Run bootstrap Phase 5 — validate with user before writing
+3. Generate `docs/expert/<slug>.md`
+4. Add a new row to `## Flows Index` in KNOWLEDGE.md with status `✅ ready`
+
+### Other missing sections (Glossary, Integrations, Tech Debt)
+
+1. Read only signal files and existing flow docs — no new source file reads
+2. Infer content from what is already known
+3. Insert the section at the correct position per the KNOWLEDGE.md template
+4. If a section cannot be filled confidently, insert it with `Unknown — ask team` placeholders rather than leaving it absent
+
+---
+
+## Step 6 — Report completion
+
+After all work is done:
 
 ```
 ## Refresh Complete
 
+### Regenerated
 ✅ docs/expert/order-flow.md — regenerated
 ✅ docs/expert/auth-flow.md — regenerated
-⚠️  docs/expert/payments-flow.md — skipped (schema_version mismatch — manual migration required)
 
-Stage and commit the updated docs alongside your next code change:
+### Gaps filled
+✅ Architecture Overview — Mermaid diagram added to KNOWLEDGE.md
+✅ Domain Glossary — added (3 terms inferred from codebase)
+✅ notifications flow — new doc generated at docs/expert/notifications.md
+
+### Skipped
+⚠️  docs/expert/payments-flow.md — schema_version mismatch — manual migration required
+
+Stage and commit:
 git add docs/expert/ KNOWLEDGE.md
-git commit -m "docs: refresh stale knowledge docs"
+git commit -m "docs: refresh — regenerate stale docs + fill gaps"
 ```

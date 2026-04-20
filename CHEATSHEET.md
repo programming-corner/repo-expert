@@ -17,7 +17,7 @@ _Writes `KNOWLEDGE.md` to **repo root** and flow docs to `docs/expert/`_
 | `what's the tech stack?` | Same — bootstraps if no knowledge base yet |
 | `walk me through the codebase` | Same |
 | `create a knowledge base` | Same |
-| `generate an architecture diagram` | Same — bootstraps first, then generates diagram |
+| `generate an architecture diagram` | Same — architecture diagram is always generated during bootstrap |
 | `I just joined this team` | Same — also generates onboarding guide after scan |
 | `onboard me` | Same as above |
 
@@ -133,14 +133,30 @@ _Triggered by a diff, PR keyword, or GitHub PR URL — not by "review this" alon
 ---
 
 ## 🔄 Refresh — Keep docs up to date
-_Detects stale docs via git SHA comparison, zero API cost until approved_
+_Runs two checks every time: staleness (git-based) + gap detection (always, even with no new commits)_
 
 | What you say | What happens |
 |---|---|
-| `refresh` | Staleness report → regenerate approved docs |
+| `refresh` | Scan report → regenerate stale docs + fill missing sections |
 | `rescan` | Same |
 | `update knowledge` | Same |
 | `re-learn this repo` | Same |
+
+**Scan report covers:**
+- ⚠️ Stale flow docs (source files changed since last git SHA)
+- ❌ Missing sections in KNOWLEDGE.md (e.g. no architecture diagram, no glossary)
+- ⚠️ New flows detected (directories found in repo but not in flows index)
+
+**Response options after scan:**
+| Reply | What happens |
+|---|---|
+| `all` | Regenerate stale docs + fill all gaps |
+| `gaps only` | Fill missing sections only, skip stale docs |
+| `stale only` | Regenerate stale docs only, skip gaps |
+| `select [names]` | Pick specific items (e.g. `"architecture diagram and order flow"`) |
+| `cancel` | Do nothing |
+
+> Gap detection runs even when there are no new commits — useful when KNOWLEDGE.md was generated before a section (like the architecture diagram) existed.
 
 ---
 
