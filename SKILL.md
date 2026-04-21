@@ -1,5 +1,5 @@
 ---
-name: megaopt-repo-expert
+name: repo-expert
 description: >
   RepoMind — the universal self-bootstrapping repo expert that thinks and speaks like a senior tech
   lead. ALWAYS use this skill when: a repo path or GitHub URL is mentioned, user says "explain this
