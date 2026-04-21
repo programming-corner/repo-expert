@@ -4,6 +4,14 @@
 
 ---
 
+## Installation
+
+```bash
+npx skills add programming-corner/repo-expert
+```
+
+---
+
 ## What it does
 
 RepoMind reads your codebase before answering — it never guesses about repo-specific details. It builds a persistent knowledge base (`KNOWLEDGE.md`) on first run and keeps it current across code changes.
