@@ -1,4 +1,4 @@
-# RepoMind — Universal Repo Expert
+# REPO-EXPERT — Universal Repo Expert
 
 > A self-bootstrapping Claude Code skill that thinks and speaks like a senior tech lead. Drop it into any repo and ask anything.
 
